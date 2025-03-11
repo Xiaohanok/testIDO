@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract IDOPresale is ERC20, Ownable {
+interface IRNTToken is IERC20 {
+    function transfer(address to, uint256 amount) external returns (bool);
+}
+
+contract IDOPresale is Ownable {
     struct Presale {
         uint256 softCap; // 募集目标 (100 ETH)
         uint256 hardCap; // 募集上限 (200 ETH)
@@ -16,6 +20,7 @@ contract IDOPresale is ERC20, Ownable {
 
     Presale public presale;
     address public projectOwner;
+    IRNTToken public token;
     uint256 public constant MIN_CONTRIBUTION = 0.01 ether;
     uint256 public constant MAX_CONTRIBUTION = 0.1 ether;
     uint256 public constant TOTAL_TOKENS_FOR_SALE = 1_000_000 * 1e18;
@@ -41,22 +46,24 @@ contract IDOPresale is ERC20, Ownable {
         _;
     }
 
-    constructor(
+    constructor() Ownable(msg.sender) {
+        projectOwner = msg.sender;
+    }
+
+    function createPresale(
+        address _token,
         uint256 _startTime,
         uint256 _endTime
-    ) ERC20("IDO Token", "IDOT") Ownable(msg.sender) {
+    ) external onlyOwner {
         require(_endTime > _startTime, "Invalid presale time");
-        
+        token = IRNTToken(_token); 
         presale.softCap = 100 ether;
         presale.hardCap = 200 ether;
         presale.startTime = _startTime;
         presale.endTime = _endTime;
         presale.totalCollected = 0;
-        projectOwner = msg.sender;
 
-        _mint(address(this), TOTAL_TOKENS_FOR_SALE);
-
-        emit PresaleCreated(100 ether, 200 ether, _startTime, _endTime);
+        emit PresaleCreated(presale.softCap, presale.hardCap, _startTime, _endTime);
     }
 
     function participate() external payable onlyDuringPresale {
@@ -75,7 +82,7 @@ contract IDOPresale is ERC20, Ownable {
         
         uint256 tokenAmount = (contributed * TOTAL_TOKENS_FOR_SALE) / presale.totalCollected;
         presale.contributions[msg.sender] = 0;
-        _transfer(address(this), msg.sender, tokenAmount);
+        require(token.transfer(msg.sender, tokenAmount), "Token transfer failed");
         
         emit TokensClaimed(msg.sender, tokenAmount);
     }
@@ -88,18 +95,16 @@ contract IDOPresale is ERC20, Ownable {
         presale.contributions[msg.sender] = 0;
         (bool success, ) = payable(msg.sender).call{value: contributed}("");
         require(success, "Refund transfer failed");
-        
-        emit Refunded(msg.sender, contributed);
     }
 
-    function withdrawETH() external onlyAfterPresale onlyOwner onlySuccess {
+        function withdrawETH() external onlyAfterPresale onlyOwner onlySuccess {
         uint256 amount = address(this).balance;
         (bool success, ) = payable(projectOwner).call{value: amount}("");
         require(success, "ETH withdrawal failed");
         
         emit ETHWithdrawn(projectOwner, amount);
     }
-    
+
     function getPresaleInfo() external view returns (
     uint256 softCap,
     uint256 hardCap,
@@ -119,5 +124,6 @@ contract IDOPresale is ERC20, Ownable {
     function getContribution(address user) external view returns (uint256) {
         return presale.contributions[user];
     }
-    
+
+
 }

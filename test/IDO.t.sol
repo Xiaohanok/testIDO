@@ -3,9 +3,11 @@ pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
 import "../src/IDO.sol";
+import "../src/RNTToken.sol";
 
 contract IDOPresaleTest is Test {
     IDOPresale idoPresale;
+    RNTToken token;
     address owner = address(0x856);
     address user1 = address(0x123);
     address user2 = address(0x456);
@@ -15,8 +17,11 @@ contract IDOPresaleTest is Test {
     function setUp() public {
         startTime = block.timestamp + 1; // 预售开始时间设为未来
         endTime = startTime + 1 days;    // 预售持续一天
-        vm.prank(owner);
-        idoPresale = new IDOPresale(startTime, endTime);
+        vm.startPrank(owner);
+        idoPresale = new IDOPresale();
+        token = new RNTToken(address(idoPresale),address(0x123456));
+        idoPresale.createPresale(address(token),startTime, endTime);
+        vm.stopPrank();
     }
 
     function testParticipate() public {
